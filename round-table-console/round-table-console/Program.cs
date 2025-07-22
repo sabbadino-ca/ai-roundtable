@@ -1,4 +1,5 @@
 ﻿// Program.cs  –  .NET 8   (console-multiplexer with per-child ShowWindow flag)
+using round_table_console;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -97,33 +98,41 @@ class Program
         {
             string json = await System.IO.File.ReadAllTextAsync(path);
             var specs = JsonSerializer.Deserialize<ChildSpec[]>(json,
-                          new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+                          new JsonSerializerOptions {
+                              PropertyNameCaseInsensitive = true,
+                              ReadCommentHandling = JsonCommentHandling.Skip
+                          }) ?? [];
             var dupe = specs.GroupBy(s => s.Name).FirstOrDefault(g => g.Count() > 1);
             if (dupe != null) { Console.Error.WriteLine($"Duplicate child name \"{dupe.Key}\""); return false; }
-            foreach (var s in specs) Spawn(s);
+            foreach (var s in specs)
+            {
+             await Spawn(s);
+            }
             return true;
         }
         catch (Exception ex) { Console.Error.WriteLine($"Config error: {ex.Message}"); return false; }
     }
 
-    private static void Spawn(ChildSpec spec)
+    private async static Task Spawn(ChildSpec spec)
     {
         var exe = spec.Cmd;
         var  argLine = spec.args;
 
-        var psi = new ProcessStartInfo(exe, argLine)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = false //!spec.ShowWindow
-        };
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            psi.WindowStyle = spec.ShowWindow ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden;
+        var p = await CommandRunnerService.RunCommand(exe + " " + argLine);
 
-        var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        if (!p.Start()) { Console.Error.WriteLine($"[{spec.Name}] FAILED to start {spec.Cmd}"); return; }
+        //var psi = new ProcessStartInfo(exe, argLine)
+        //{
+        //    RedirectStandardInput = true,
+        //    RedirectStandardOutput = true,
+        //    RedirectStandardError = true,
+        //    UseShellExecute = false,
+        //    CreateNoWindow = false //!spec.ShowWindow
+        //};
+        //if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        //    psi.WindowStyle = spec.ShowWindow ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden;
+
+        //var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        //if (!p.Start()) { Console.Error.WriteLine($"[{spec.Name}] FAILED to start {spec.Cmd}"); return; }
 
         var child = new Child { Name = spec.Name, Proc = p };
         child.StdOutPump = Pump(child, p.StandardOutput, Console.Out);

@@ -1,14 +1,20 @@
 [
+  //{
+  //  "name": "c1",
+  //  "cmd": "dotnet.exe",
+  //  "args": "run --project D:\\repos\\personal-github\\ai-roundtable\\round-table-console\\actor1\\actor1.csproj",
+  //  "showWindow": true
+  //},
+  //{
+  //  "name": "c2",
+  //  "cmd": "dotnet.exe",
+  //  "args": "run --project:\\repos\\personal-github\\ai-roundtable\\round-table-console\\actor2\\actor2.csproj",
+  //  "showWindow": true
+  //}
   {
-    "name": "c1",
-    "cmd": "dotnet.exe",
-    "args": "run --project D:\\repos\\personal-github\\ai-roundtable\\round-table-console\\actor1\\actor1.csproj",
-    "showWindow": true
-  },
-  {
-    "name": "c2",
-    "cmd": "dotnet.exe",
-    "args": "run --project:\\repos\\personal-github\\ai-roundtable\\round-table-console\\actor2\\actor2.csproj",
+    "name": "claude",
+    "cmd": "claude",
+    "args": "",
     "showWindow": true
   }
 ]
