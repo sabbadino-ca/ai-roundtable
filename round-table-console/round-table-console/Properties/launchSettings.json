@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "round-table-console": {
+      "commandName": "Project",
+      "commandLineArgs": "json1.json"
+    }
+  }
+}
