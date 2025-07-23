@@ -118,21 +118,22 @@ class Program
         var exe = spec.Cmd;
         var  argLine = spec.args;
 
-        var p = await CommandRunnerService.RunCommand(exe + " " + argLine);
+        //var p = await CommandRunnerService.RunCommand(exe + " " + argLine);
 
-        //var psi = new ProcessStartInfo(exe, argLine)
-        //{
-        //    RedirectStandardInput = true,
-        //    RedirectStandardOutput = true,
-        //    RedirectStandardError = true,
-        //    UseShellExecute = false,
-        //    CreateNoWindow = false //!spec.ShowWindow
-        //};
-        //if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        //    psi.WindowStyle = spec.ShowWindow ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden;
+        var psi = new ProcessStartInfo(exe, argLine)
+        {
+            WorkingDirectory = @"C:\\Users\\esabbadin\\AppData\\Local\\nvm\\v22.15.0\\node_modules\\@anthropic-ai\\claude-code",    
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = false
+        };
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            psi.WindowStyle = spec.ShowWindow ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden;
 
-        //var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        //if (!p.Start()) { Console.Error.WriteLine($"[{spec.Name}] FAILED to start {spec.Cmd}"); return; }
+        var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        if (!p.Start()) { Console.Error.WriteLine($"[{spec.Name}] FAILED to start {spec.Cmd}"); return; }
 
         var child = new Child { Name = spec.Name, Proc = p };
         child.StdOutPump = Pump(child, p.StandardOutput, Console.Out);
@@ -186,12 +187,12 @@ class Program
         if (missed.Count() == 0)
         {
             string payload = $"user: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(payload);
+            await target.Proc.StandardInput.WriteLineAsync($"payload {Environment.NewLine}");
         }
         else
         {
             string payload = $"{string.Join("\\n", missed)}\\nuser: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(payload);
+            await target.Proc.StandardInput.WriteLineAsync($"payload {Environment.NewLine}");
         }
         
         _cursor[target.Name] = _nextIndex - 1;            // mark as caught up

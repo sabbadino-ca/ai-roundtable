@@ -11,10 +11,16 @@
   //  "args": "run --project:\\repos\\personal-github\\ai-roundtable\\round-table-console\\actor2\\actor2.csproj",
   //  "showWindow": true
   //}
+  //{
+  //  "name": "claude",
+  //  "cmd": "claude.cmd",
+  //  "args": "",
+  //  "showWindow": true
+  //}
   {
     "name": "claude",
-    "cmd": "claude",
-    "args": "",
+    "cmd": "node.exe",
+    "args": "C:\\Users\\esabbadin\\AppData\\Local\\nvm\\v22.15.0\\node_modules\\@anthropic-ai\\claude-code\\cli.js",
     "showWindow": true
   }
 ]
