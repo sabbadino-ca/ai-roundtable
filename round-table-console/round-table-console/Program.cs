@@ -35,6 +35,8 @@ class Program
     private static readonly ConcurrentDictionary<string, long> _cursor = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, Child> _children = new(StringComparer.OrdinalIgnoreCase);
 
+
+
     static async Task<int> Main(string[] args)
     {
         if (args.Length != 1)
@@ -183,16 +185,16 @@ class Program
         long last = _cursor.TryGetValue(target.Name, out var i) ? i : -1;
         var missed = _log.Where(e => e.Index > last && e.Source != target.Name)
                          .OrderBy(e => e.Index)
-                         .Select(e => $"{e.Source}: {Escape(e.Message)}");
+                         .Select(e => $"{e.Source}: {Escape(e.Message)}").ToList();
         if (missed.Count() == 0)
         {
             string payload = $"user: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync($"payload {Environment.NewLine}");
+            await target.Proc.StandardInput.WriteLineAsync(payload);
         }
         else
         {
             string payload = $"{string.Join("\\n", missed)}\\nuser: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync($"payload {Environment.NewLine}");
+            await target.Proc.StandardInput.WriteLineAsync(payload);
         }
         
         _cursor[target.Name] = _nextIndex - 1;            // mark as caught up
@@ -203,21 +205,12 @@ class Program
 
     private static bool TryParseTarget(string line, out string name, out string payload)
     {
-        var m = Regex.Match(line, @"^\s*/([A-Za-z0-9_\-]+):(.*)$");
+        // Split on first ':'; require at least one non-colon, non-whitespace char before ':'
+        var m = Regex.Match(line, @"^\s*([^:\s].*?)\s*:\s*(.*)$");
         if (m.Success) { name = m.Groups[1].Value; payload = m.Groups[2].Value; return true; }
         name = payload = ""; return false;
     }
 
-    private static (string exe, string args) SplitCommandLine(string cmd)
-    {
-        var m = Regex.Match(cmd.Trim(),
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                ? @"^(""[^""]+""|\S+)\s*(.*)$"
-                : @"^('(?:\\'|[^'])*'|""(?:\\""|[^""])*""|\S+)\s*(.*)$");
-        if (!m.Success) throw new ArgumentException($"Bad command: {cmd}");
-        return (Trim(m.Groups[1].Value), m.Groups[2].Value);
-    }
-    private static string Trim(string s) =>
-        (s.StartsWith('"') && s.EndsWith('"')) || (s.StartsWith('\'') && s.EndsWith('\''))
-            ? s[1..^1] : s;
+  
+  
 }

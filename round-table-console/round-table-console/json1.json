@@ -18,9 +18,15 @@
   //  "showWindow": true
   //}
   {
-    "name": "claude",
-    "cmd": "node.exe",
-    "args": "C:\\Users\\esabbadin\\AppData\\Local\\nvm\\v22.15.0\\node_modules\\@anthropic-ai\\claude-code\\cli.js",
+    "name": "Brian",
+    "cmd": "dotnet",
+    "args": "run --project D:\\repos\\personal-devops-ca\\ai-roundtable\\round-table-console\\actor1\\actor1.csproj",
+    "showWindow": true
+  },
+  {
+    "name": "Emma",
+    "cmd": "dotnet",
+    "args": "run --project D:\\repos\\personal-devops-ca\\ai-roundtable\\round-table-console\\actor2\\actor2.csproj",
     "showWindow": true
   }
 ]
