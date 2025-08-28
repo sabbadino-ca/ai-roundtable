@@ -83,10 +83,14 @@ class Program
                     {
                         await SendWithCatchUpAsync(msg, child);
 
-                        
+
                     }
                     else
+                    {
+                        _log.RemoveAt(_log.Count - 1);  
+                        _currentConversationPair--;
                         Console.Error.WriteLine($"[proxy] child \"{tgt}\" not found or exited");
+                    }
                 }
                 else
                 {
@@ -203,34 +207,43 @@ class Program
 
     private static async Task SendWithCatchUpAsync(string userText, Child target)
     {
+        if (_currentConversationPair==0)
+        {
+            string payloadb = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
+            await target.Proc.StandardInput.WriteLineAsync(payloadb);
+            return;
+        }
         long last = _cursor.TryGetValue(target.Name, out var i) ? i : 0;
         //_log.Count-1 : ignore the last entry, which is the current active conversation 
         var logWithoutCurrent = _log.Take(_log.Count - 1);
         var missed = logWithoutCurrent.Where(e => e.Index > last).OrderBy(e => e.Index).ToList();
-
-        if (missed.Count() == 0)
+        if (missed.Count == 0)
         {
-            var prev = logWithoutCurrent.LastOrDefault();
-            if (prev != null)
+            // send only previous utterance 
+            var tt = logWithoutCurrent.Last().Entries.Where(x => x.Source != target.Name);
+            string msg1= "";
+            // previous conversation utterance had no other actors 
+            if (tt.Count()>1) // ==1 BECAUSE IF THE USER 
             {
-                var msg = string.Join('-', prev.Entries.Where(x=> x.Source!= target.Name).Select(e => $"{e.Source}: {Escape(e.Message)}"));
-                string payload = $"{msg} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
-                await target.Proc.StandardInput.WriteLineAsync(payload);
-                return;
+                msg1 += string.Join(' ', tt.Select(e => $"<{e.Source}: {Escape(e.Message)} />"));
             }
-            else
-            {
-                string payload = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
-                await target.Proc.StandardInput.WriteLineAsync(payload);
-            }
+            msg1 = $"{msg1} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
+            await target.Proc.StandardInput.WriteLineAsync(msg1);
         }
         else
         {
-            var msg = string.Join('-',missed.SelectMany(s => s.Entries).Select(e => $"{e.Source}: {Escape(e.Message)}"));
-            string payload = $"{msg} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(payload);
+            string msg2 = "";
+            foreach (var miss in missed)
+            {
+                var tt = miss.Entries.Where(x => x.Source != target.Name);
+                if (tt.Count() >1) // ==1 BECAUSE OF THE USER 
+                {
+                    msg2 += string.Join(' ', tt.Select(e => $"<{e.Source}: {Escape(e.Message)} />"));
+                }
+            }
+            msg2= $"{msg2} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
+            await target.Proc.StandardInput.WriteLineAsync(msg2);
         }
-        
         _cursor[target.Name] = _currentConversationPair ;            // mark as caught up
     }
     private static string Escape(string s) => s.Replace("\r", "").Replace("\n", "\\n");

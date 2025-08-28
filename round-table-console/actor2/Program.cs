@@ -18,13 +18,22 @@ var messages = new List<ChatMessage>
 };
 while ((line = Console.ReadLine()) != null)
 {
-    File.AppendAllText(".\\actor2.log", line.Replace("\\n", Environment.NewLine));
-    File.AppendAllText(".\\actor2.log", $"{Environment.NewLine}**************{Environment.NewLine}");
-    //Console.WriteLine(DateTime.Now);
-    messages.Add(new UserChatMessage(line));
-    var completion = await chatClient.CompleteChatAsync(messages);
-    var response = completion.Value.Content[0].Text;
-    response = response.Replace("\n", " ");
-    messages.Add(new AssistantChatMessage(response));
-    Console.WriteLine(response);
+    try
+    {
+        File.AppendAllText(".\\actor2.log", line.Replace("\\n", Environment.NewLine));
+        File.AppendAllText(".\\actor2.log", $"{Environment.NewLine}**************{Environment.NewLine}");
+        //Console.WriteLine(DateTime.Now);
+        messages.Add(new UserChatMessage(line));
+        var completion = await chatClient.CompleteChatAsync(messages);
+        var response = completion.Value.Content[0].Text;
+        response = response.Replace("\n", " ");
+        messages.Add(new AssistantChatMessage(response));
+        Console.WriteLine(response);
+    }
+    catch (Exception ex)
+    {
+        File.AppendAllText(".\\actor2.log", ex.ToString());
+        await Console.Error.WriteLineAsync(ex.ToString()); 
+        await Console.Error.FlushAsync();
+    }
 }
