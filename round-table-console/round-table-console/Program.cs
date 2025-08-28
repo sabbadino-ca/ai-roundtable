@@ -11,7 +11,9 @@ using System.Threading.Tasks;
 
 /*───────────────────────────────────────── 1 - Data types ─────────────────────────────────────────*/
 
-record ChildSpec(string Name, string Cmd, string args, bool ShowWindow = false);
+
+
+record ChildSpec(string Name, string Cmd, string args);
 
 public enum MsgKind { User, Llm }
 
@@ -32,6 +34,7 @@ internal sealed class Child
 
 class Program
 {
+    private static  string _nameOfRoundTableParticipant = "master of the universe";
     // global state
     private static readonly List<LogEntry> _log = new();
     private static int _currentConversationPair =-1;
@@ -67,7 +70,7 @@ class Program
                 _log.Add(entry);
                 if (TryParseTarget(line, out var tgt, out var msg))
                 {
-                    Append("user", msg, MsgKind.User);
+                    Append(_nameOfRoundTableParticipant, msg, MsgKind.User);
                     if (_children.TryGetValue(tgt, out var child) && !child.Proc.HasExited)
                     {
                         await SendWithCatchUpAsync(msg, child);
@@ -79,7 +82,7 @@ class Program
                 }
                 else
                 {
-                    Append("user", line, MsgKind.User);
+                    Append(_nameOfRoundTableParticipant, line, MsgKind.User);
                     foreach (var c in _children.Values)
                         if (!c.Proc.HasExited)
                             await SendWithCatchUpAsync(line, c);
@@ -142,7 +145,7 @@ class Program
             CreateNoWindow = false
         };
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            psi.WindowStyle = spec.ShowWindow ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden;
+            psi.WindowStyle = ProcessWindowStyle.Hidden;
 
         var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
         if (!p.Start()) { Console.Error.WriteLine($"[{spec.Name}] FAILED to start {spec.Cmd}"); return; }
@@ -152,7 +155,7 @@ class Program
         child.StdErrPump = Pump(child, p.StandardError, Console.Error, ConsoleColor.Red);
 
         _children.TryAdd(spec.Name, child);
-        Console.WriteLine($"Spawned [{spec.Name}] {spec.Cmd}  (window {(spec.ShowWindow ? "shown" : "hidden")})");
+        Console.WriteLine($"Spawned [{spec.Name}] {spec.Cmd}");
     }
 
     /*───────────────────────────────────────── 4 - Pumps & logging ────────────────────────────────────*/
@@ -198,13 +201,13 @@ class Program
 
         if (missed.Count() == 0)
         {
-            string payload = $"user: {Escape(userText)}";
+            string payload = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
             await target.Proc.StandardInput.WriteLineAsync(payload);
         }
         else
         {
             var msg = string.Join('-',missed.SelectMany(s => s.Entries).Select(e => $"{e.Source}: {Escape(e.Message)}"));
-            string payload = $"{msg} - user: {Escape(userText)}";
+            string payload = $"{msg} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
             await target.Proc.StandardInput.WriteLineAsync(payload);
         }
         
