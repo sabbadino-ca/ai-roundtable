@@ -19,8 +19,16 @@ public enum MsgKind { User, Llm }
 
 public class LogEntry
 {
+    public DateTime Timestamp { get;init; }
+    public string Source { get;init; }
+public string Message { get; init; }
+       public MsgKind Kind { get; init; }
+}
+
+public class LogEntries
+{
     public long Index { get; init; }
-    public List<(DateTime Timestamp, string Source, string Message, MsgKind Kind)> Entries { get; init; } = new();
+    public List<LogEntry> Entries { get; init; } = new();
 }
 internal sealed class Child
 {
@@ -36,7 +44,7 @@ class Program
 {
     private static  string _nameOfRoundTableParticipant = "master of the universe";
     // global state
-    private static readonly List<LogEntry> _log = new();
+    private static readonly List<LogEntries> _log = new();
     private static int _currentConversationPair =-1;
 
     private static readonly ConcurrentDictionary<string, long> _cursor = new(StringComparer.OrdinalIgnoreCase);
@@ -66,7 +74,7 @@ class Program
             while ((line = await Console.In.ReadLineAsync()) is not null)
             {
                 _currentConversationPair++;
-                var entry = new LogEntry { Index = _currentConversationPair };
+                var entry = new LogEntries { Index = _currentConversationPair };
                 _log.Add(entry);
                 if (TryParseTarget(line, out var tgt, out var msg))
                 {
@@ -188,7 +196,7 @@ class Program
     private static void Append(string src, string msg, MsgKind kind)
     {
         var last = _log.Last();
-        last.Entries.Add((DateTime.UtcNow, src, msg, kind));
+        last.Entries.Add(new LogEntry { Timestamp= DateTime.UtcNow,  Source= src,  Message = msg, Kind = kind });
     }
 
     /*───────────────────────────────────────── 5 - Catch-up sender (escaped \n) ───────────────────────*/
@@ -197,12 +205,24 @@ class Program
     {
         long last = _cursor.TryGetValue(target.Name, out var i) ? i : 0;
         //_log.Count-1 : ignore the last entry, which is the current active conversation 
-        var missed = _log.Take(_log.Count-1).Where(e => e.Index > last).OrderBy(e => e.Index).ToList();
+        var logWithoutCurrent = _log.Take(_log.Count - 1);
+        var missed = logWithoutCurrent.Where(e => e.Index > last).OrderBy(e => e.Index).ToList();
 
         if (missed.Count() == 0)
         {
-            string payload = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(payload);
+            var prev = logWithoutCurrent.LastOrDefault();
+            if (prev != null)
+            {
+                var msg = string.Join('-', prev.Entries.Where(x=> x.Source!= target.Name).Select(e => $"{e.Source}: {Escape(e.Message)}"));
+                string payload = $"{msg} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
+                await target.Proc.StandardInput.WriteLineAsync(payload);
+                return;
+            }
+            else
+            {
+                string payload = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
+                await target.Proc.StandardInput.WriteLineAsync(payload);
+            }
         }
         else
         {
