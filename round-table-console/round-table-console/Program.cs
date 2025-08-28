@@ -13,10 +13,13 @@ using System.Threading.Tasks;
 
 record ChildSpec(string Name, string Cmd, string args, bool ShowWindow = false);
 
-enum MsgKind { User, Llm }
+public enum MsgKind { User, Llm }
 
-record LogEntry(long Index, DateTime Timestamp, string Source, string Message, MsgKind Kind);
-
+public class LogEntry
+{
+    public long Index { get; init; }
+    public List<(DateTime Timestamp, string Source, string Message, MsgKind Kind)> Entries { get; init; } = new();
+}
 internal sealed class Child
 {
     public required string Name;
@@ -30,8 +33,9 @@ internal sealed class Child
 class Program
 {
     // global state
-    private static readonly ConcurrentQueue<LogEntry> _log = new();
-    private static long _nextIndex;
+    private static readonly List<LogEntry> _log = new();
+    private static int _currentConversationPair =-1;
+
     private static readonly ConcurrentDictionary<string, long> _cursor = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, Child> _children = new(StringComparer.OrdinalIgnoreCase);
 
@@ -58,22 +62,28 @@ class Program
             string? line;
             while ((line = await Console.In.ReadLineAsync()) is not null)
             {
+                _currentConversationPair++;
+                var entry = new LogEntry { Index = _currentConversationPair };
+                _log.Add(entry);
                 if (TryParseTarget(line, out var tgt, out var msg))
                 {
+                    Append("user", msg, MsgKind.User);
                     if (_children.TryGetValue(tgt, out var child) && !child.Proc.HasExited)
                     {
                         await SendWithCatchUpAsync(msg, child);
-                        Append("user", msg, MsgKind.User);
+
+                        
                     }
                     else
                         Console.Error.WriteLine($"[proxy] child \"{tgt}\" not found or exited");
                 }
                 else
                 {
+                    Append("user", line, MsgKind.User);
                     foreach (var c in _children.Values)
                         if (!c.Proc.HasExited)
                             await SendWithCatchUpAsync(line, c);
-                    Append("user", line, MsgKind.User);
+                    
                 }
                
             }
@@ -155,8 +165,8 @@ class Program
         string? line;
         while ((line = await reader.ReadLineAsync()) is not null)
         {
-            long idx = Append(child.Name, line, MsgKind.Llm);
-            _cursor[child.Name] = idx;
+            Append(child.Name, line, MsgKind.Llm);
+            _cursor[child.Name] = _currentConversationPair;
 
             if (color is ConsoleColor c)
             {
@@ -172,20 +182,20 @@ class Program
         }
     }
 
-    private static long Append(string src, string msg, MsgKind kind)
+    private static void Append(string src, string msg, MsgKind kind)
     {
-        long idx = Interlocked.Increment(ref _nextIndex) - 1;
-        _log.Enqueue(new(idx, DateTime.UtcNow, src, msg, kind)); return idx;
+        var last = _log.Last();
+        last.Entries.Add((DateTime.UtcNow, src, msg, kind));
     }
 
     /*───────────────────────────────────────── 5 - Catch-up sender (escaped \n) ───────────────────────*/
 
     private static async Task SendWithCatchUpAsync(string userText, Child target)
     {
-        long last = _cursor.TryGetValue(target.Name, out var i) ? i : -1;
-        var missed = _log.Where(e => e.Index > last && e.Source != target.Name)
-                         .OrderBy(e => e.Index)
-                         .Select(e => $"{e.Source}: {Escape(e.Message)}").ToList();
+        long last = _cursor.TryGetValue(target.Name, out var i) ? i : 0;
+        //_log.Count-1 : ignore the last entry, which is the current active conversation 
+        var missed = _log.Take(_log.Count-1).Where(e => e.Index > last).OrderBy(e => e.Index).ToList();
+
         if (missed.Count() == 0)
         {
             string payload = $"user: {Escape(userText)}";
@@ -193,11 +203,12 @@ class Program
         }
         else
         {
-            string payload = $"{string.Join("\\n", missed)}\\nuser: {Escape(userText)}";
+            var msg = string.Join('-',missed.SelectMany(s => s.Entries).Select(e => $"{e.Source}: {Escape(e.Message)}"));
+            string payload = $"{msg} - user: {Escape(userText)}";
             await target.Proc.StandardInput.WriteLineAsync(payload);
         }
         
-        _cursor[target.Name] = _nextIndex - 1;            // mark as caught up
+        _cursor[target.Name] = _currentConversationPair ;            // mark as caught up
     }
     private static string Escape(string s) => s.Replace("\r", "").Replace("\n", "\\n");
 

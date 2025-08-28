@@ -24,7 +24,7 @@ while ((line = Console.ReadLine()) != null)
     messages.Add(new UserChatMessage(line));
     var completion = await chatClient.CompleteChatAsync(messages);
     var response = completion.Value.Content[0].Text;
-    response = response.Replace("\n"," ");
+    response = response.Replace("\n", "");
     messages.Add(new AssistantChatMessage(response));
     Console.WriteLine(response);   
 }
