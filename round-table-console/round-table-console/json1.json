@@ -20,12 +20,14 @@
   {
     "name": "Brian",
     "cmd": "dotnet",
+    "color": "green",
     "args": "run --project D:\\repos\\personal-devops-ca\\ai-roundtable\\round-table-console\\actor1\\actor1.csproj",
     "showWindow": true
   },
   {
     "name": "Emma",
     "cmd": "dotnet",
+    "color": "magenta",
     "args": "run --project D:\\repos\\personal-devops-ca\\ai-roundtable\\round-table-console\\actor2\\actor2.csproj",
     "showWindow": true
   }

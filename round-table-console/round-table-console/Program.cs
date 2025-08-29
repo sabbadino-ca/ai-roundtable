@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 
 
-record ChildSpec(string Name, string Cmd, string args);
+record ChildSpec(string Name, string Cmd, string args, string color);
 
 public enum MsgKind { User, Llm }
 
@@ -36,6 +36,7 @@ internal sealed class Child
     public required Process Proc;
     public  Task? StdOutPump;
     public  Task? StdErrPump;
+    public string Color;
 }
 
 /*───────────────────────────────────────── 2 - Program ─────────────────────────────────────────────*/
@@ -46,7 +47,8 @@ class Program
     // global state
     private static readonly List<LogEntries> _log = new();
     private static int _currentConversationPair =-1;
-
+    private static bool _loop;
+    private static readonly Dictionary<string, bool> _talking = new Dictionary<string, bool>();
     private static readonly ConcurrentDictionary<string, long> _cursor = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, Child> _children = new(StringComparer.OrdinalIgnoreCase);
 
@@ -74,6 +76,15 @@ class Program
             while ((line = await Console.In.ReadLineAsync()) is not null)
             {
                 _currentConversationPair++;
+                if (line == "loop") {
+                    _loop = true;
+                    await StartLoop();
+                    continue;
+                }
+                if (line == "stop-loop")
+                {
+                    _loop = false;
+                }
                 var entry = new LogEntries { Index = _currentConversationPair };
                 _log.Add(entry);
                 if (TryParseTarget(line, out var tgt, out var msg))
@@ -81,6 +92,7 @@ class Program
                     Append(_nameOfRoundTableParticipant, msg, MsgKind.User);
                     if (_children.TryGetValue(tgt, out var child) && !child.Proc.HasExited)
                     {
+                        
                         await SendWithCatchUpAsync(msg, child);
 
 
@@ -96,8 +108,13 @@ class Program
                 {
                     Append(_nameOfRoundTableParticipant, line, MsgKind.User);
                     foreach (var c in _children.Values)
+                    {
                         if (!c.Proc.HasExited)
+                        {
+                           
                             await SendWithCatchUpAsync(line, c);
+                        }
+                    }
                     
                 }
                
@@ -117,6 +134,53 @@ class Program
         return exitCode;
     }
 
+    private static async Task StartLoop()
+    {
+        if (_talking.Values.Any(v => v))
+        {
+            Console.WriteLine("cannot start loop, someone is talking");
+        }
+        var activeCLient = _children.First();
+
+        _currentConversationPair++;
+        var entry = new LogEntries { Index = _currentConversationPair };
+        _log.Add(entry);
+
+
+        await SendWithCatchUpAsync("continue the conversation", activeCLient.Value);
+        while (_loop)
+        {
+            try
+            {
+                await Task.Delay(1000);
+                if (!_talking.Values.Any(v => v))
+                {
+
+                    activeCLient = _children.Where(x => x.Value.Name != activeCLient.Value.Name).ToList()[Rnd(_children.Count - 1)];
+
+                    _currentConversationPair++;
+                    entry = new LogEntries { Index = _currentConversationPair };
+                    _log.Add(entry);
+
+                    await SendWithCatchUpAsync("", activeCLient.Value);
+                    if (await Console.In.ReadLineAsync() == "stop-loop")
+                    {
+                        _loop = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"loop error: {ex.Message}");
+            }
+        }
+        
+    }
+    private static Random _r = new Random();
+    private static int Rnd(int n)
+    {
+        return _r.Next(0, n);  
+    }
     /*───────────────────────────────────────── 3 - Spawn & config ─────────────────────────────────────*/
 
     private static async Task<bool> LoadAndSpawnAsync(string path)
@@ -133,7 +197,8 @@ class Program
             if (dupe != null) { Console.Error.WriteLine($"Duplicate child name \"{dupe.Key}\""); return false; }
             foreach (var s in specs)
             {
-             await Spawn(s);
+                 await Spawn(s);
+                _talking.Add(s.Name,false);   
             }
             return true;
         }
@@ -162,7 +227,7 @@ class Program
         var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
         if (!p.Start()) { Console.Error.WriteLine($"[{spec.Name}] FAILED to start {spec.Cmd}"); return; }
 
-        var child = new Child { Name = spec.Name, Proc = p };
+        var child = new Child { Name = spec.Name, Proc = p , Color = spec.color};
         child.StdOutPump = Pump(child, p.StandardOutput, Console.Out);
         child.StdErrPump = Pump(child, p.StandardError, Console.Error, ConsoleColor.Red);
 
@@ -183,17 +248,33 @@ class Program
             Append(child.Name, line, MsgKind.Llm);
             _cursor[child.Name] = _currentConversationPair;
 
-            if (color is ConsoleColor c)
+            if (color is ConsoleColor forced)
             {
                 var old = Console.ForegroundColor;
-                Console.ForegroundColor = c;
-                await writer.WriteLineAsync($"[{child.Name}] {line}");
-                Console.ForegroundColor = old;
+                try
+                {
+                    Console.ForegroundColor = forced;
+                    await writer.WriteLineAsync($"[{child.Name}] {line}");
+                }
+                finally
+                {
+                    Console.ForegroundColor = old;
+                }
             }
             else
             {
-                await writer.WriteLineAsync($"[{child.Name}] {line}");
+                var old = Console.ForegroundColor;
+                try
+                {
+                    Console.ForegroundColor = ColorParser.TryParse(child.Color, out var parsed) ? parsed : old;
+                    await writer.WriteLineAsync($"[{child.Name}] {line}");
+                }
+                finally
+                {
+                    Console.ForegroundColor = old;
+                }
             }
+            _talking[child.Name] = false;
         }
     }
 
@@ -207,44 +288,58 @@ class Program
 
     private static async Task SendWithCatchUpAsync(string userText, Child target)
     {
-        if (_currentConversationPair==0)
+        try
         {
-            string payloadb = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(payloadb);
-            return;
-        }
-        long last = _cursor.TryGetValue(target.Name, out var i) ? i : 0;
-        //_log.Count-1 : ignore the last entry, which is the current active conversation 
-        var logWithoutCurrent = _log.Take(_log.Count - 1);
-        var missed = logWithoutCurrent.Where(e => e.Index > last).OrderBy(e => e.Index).ToList();
-        if (missed.Count == 0)
-        {
-            // send only previous utterance 
-            var tt = logWithoutCurrent.Last().Entries.Where(x => x.Source != target.Name);
-            string msg1= "";
-            // previous conversation utterance had no other actors 
-            if (tt.Count()>1) // ==1 BECAUSE IF THE USER 
+            _talking[target.Name] = true;
+            if (_currentConversationPair == 0)
             {
-                msg1 += string.Join(' ', tt.Select(e => $"<{e.Source}: {Escape(e.Message)} />"));
+                string payloadb = $"{_nameOfRoundTableParticipant}: {Escape(userText)}";
+                await target.Proc.StandardInput.WriteLineAsync(payloadb);
+                return;
             }
-            msg1 = $"{msg1} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(msg1);
-        }
-        else
-        {
-            string msg2 = "";
-            foreach (var miss in missed)
+            long last = _cursor.TryGetValue(target.Name, out var i) ? i : 0;
+            //_log.Count-1 : ignore the last entry, which is the current active conversation 
+            var logWithoutCurrent = _log.Take(_log.Count - 1);
+            var missed = logWithoutCurrent.Where(e => e.Index > last).OrderBy(e => e.Index).ToList();
+            if (missed.Count == 0)
             {
-                var tt = miss.Entries.Where(x => x.Source != target.Name);
-                if (tt.Count() >1) // ==1 BECAUSE OF THE USER 
+                // send only previous utterance 
+                var tt = logWithoutCurrent.Last().Entries.Where(x => x.Source != target.Name);
+                string msg1 = "";
+                // previous conversation utterance had no other actors 
+                if (tt.Count() > 1) // ==1 BECAUSE IF THE USER 
                 {
-                    msg2 += string.Join(' ', tt.Select(e => $"<{e.Source}: {Escape(e.Message)} />"));
+                    msg1 += string.Join(' ', tt.Select(e => $"<{e.Source}: {Escape(e.Message)} />"));
                 }
+                if (!string.IsNullOrWhiteSpace(userText))
+                {
+                    msg1 = $"{msg1} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
+                }
+                await target.Proc.StandardInput.WriteLineAsync(msg1);
             }
-            msg2= $"{msg2} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
-            await target.Proc.StandardInput.WriteLineAsync(msg2);
+            else
+            {
+                string msg2 = "";
+                foreach (var miss in missed)
+                {
+                    var tt = miss.Entries.Where(x => x.Source != target.Name);
+                    if (tt.Count() > 1 || tt.Count() >0 & _loop) // ==1 BECAUSE OF THE USER 
+                    {
+                        msg2 += string.Join(' ', tt.Select(e => $"<{e.Source}: {Escape(e.Message)} />"));
+                    }
+                }
+                if (!string.IsNullOrWhiteSpace(userText))
+                {
+                    msg2 = $"{msg2} - {_nameOfRoundTableParticipant}: {Escape(userText)}";
+                }
+                await target.Proc.StandardInput.WriteLineAsync(msg2);
+            }
+            _cursor[target.Name] = _currentConversationPair;            // mark as caught up
         }
-        _cursor[target.Name] = _currentConversationPair ;            // mark as caught up
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[{target.Name}] send error: {ex.Message}");
+        }
     }
     private static string Escape(string s) => s.Replace("\r", "").Replace("\n", "\\n");
 
