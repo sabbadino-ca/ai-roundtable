@@ -43,7 +43,7 @@ internal sealed class Child
 
 class Program
 {
-    private static  string _nameOfRoundTableParticipant = "Enrico";
+    private static  string _nameOfRoundTableParticipant = "Enrico (a male)";
     // global state
     private static readonly List<LogEntries> _log = new();
     private static int _currentConversationPair =-1;
@@ -157,16 +157,18 @@ class Program
                 {
 
                     activeCLient = _children.Where(x => x.Value.Name != activeCLient.Value.Name).ToList()[Rnd(_children.Count - 1)];
-
-                    _currentConversationPair++;
-                    entry = new LogEntries { Index = _currentConversationPair };
-                    _log.Add(entry);
-
                     await SendWithCatchUpAsync("", activeCLient.Value);
+
                     if (await Console.In.ReadLineAsync() == "stop-loop")
                     {
                         _loop = false;
                         break;
+                    }
+                    else
+                    {
+                        _currentConversationPair++;
+                        entry = new LogEntries { Index = _currentConversationPair };
+                        _log.Add(entry);
                     }
                 }
             }
