@@ -43,7 +43,7 @@ internal sealed class Child
 
 class Program
 {
-    private static  string _nameOfRoundTableParticipant = "master of the universe";
+    private static  string _nameOfRoundTableParticipant = "Enrico";
     // global state
     private static readonly List<LogEntries> _log = new();
     private static int _currentConversationPair =-1;
@@ -166,6 +166,7 @@ class Program
                     if (await Console.In.ReadLineAsync() == "stop-loop")
                     {
                         _loop = false;
+                        break;
                     }
                 }
             }
