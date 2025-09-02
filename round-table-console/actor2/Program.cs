@@ -5,6 +5,7 @@ using OllamaSharp;
 using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
+using System.Text.Json;
 var configuration = new ConfigurationBuilder().AddJsonFile("appsettings.json").AddUserSecrets<Program>().Build();
 
 //var azureClient = new AzureOpenAIClient(
@@ -37,14 +38,24 @@ while ((line = Console.ReadLine()) != null)
 {
     try
     {
-   //     File.AppendAllText(".\\actor2.log", line.Replace("\\n", Environment.NewLine));
-     //   File.AppendAllText(".\\actor2.log", $"{Environment.NewLine}**************{Environment.NewLine}");
+        // File.AppendAllText(".\\actor1.log", line.Replace("\\n", Environment.NewLine));
+        // File.AppendAllText(".\\actor1.log", $"{Environment.NewLine}**************{Environment.NewLine}");
         //Console.WriteLine(DateTime.Now);
-        messages.Add(new UserChatMessage(line));
+        var messagesToAdd = JsonSerializer.Deserialize<List<shared.Message>>(line);
+        foreach (var msg in messagesToAdd)
+        {
+            if (msg.Role == shared.Message.AssistantRole)
+                messages.Add(new AssistantChatMessage(msg.Text));
+            else
+            {
+                messages.Add(new UserChatMessage(msg.Text));
+            }
+        }
+        //messages.Add(new UserChatMessage(line));
         var completion = await chatClient.CompleteChatAsync(messages);
         var response = completion.Value.Content[0].Text;
         response = response.Replace("\n", "");
-        messages.Add(new AssistantChatMessage(response));
+        //messages.Add(new AssistantChatMessage(response));
         Console.WriteLine(response);
     }
     catch (Exception ex)
