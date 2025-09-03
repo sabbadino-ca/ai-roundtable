@@ -11,8 +11,8 @@ var configuration = new ConfigurationBuilder().AddJsonFile("appsettings.json").A
 //var azureClient = new AzureOpenAIClient(
 //    new Uri(configuration["AzureOpenAiApiUrl"]),
 //    new ApiKeyCredential(apiKey));
-string apiKey = configuration["AzureOpenAiApiKey"];
-string deploymentName = configuration["DeploymentOrModelName"];
+string apiKey = configuration["AzureOpenAiApiKey"]??"";
+string deploymentName = configuration["DeploymentOrModelName"] ?? "";
 
 var chatClient = new ChatClient(
     model: deploymentName,
@@ -41,7 +41,7 @@ while ((line = Console.ReadLine()) != null)
         // File.AppendAllText(".\\actor1.log", line.Replace("\\n", Environment.NewLine));
         // File.AppendAllText(".\\actor1.log", $"{Environment.NewLine}**************{Environment.NewLine}");
         //Console.WriteLine(DateTime.Now);
-        var messagesToAdd = JsonSerializer.Deserialize<List<shared.Message>>(line);
+        var messagesToAdd = JsonSerializer.Deserialize<List<shared.Message>>(line)??new();
         foreach (var msg in messagesToAdd)
         {
             if (msg.Role == shared.Message.AssistantRole)
