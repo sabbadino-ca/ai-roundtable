@@ -159,11 +159,9 @@ class Program
                     activeCLient = _children.Where(x => x.Value.Name != activeCLient.Value.Name).ToList()[Rnd(_children.Count - 1)];
                     await SendWithCatchUpAsync(activeCLient.Value);
                     var task = Task.Factory.StartNew(Console.ReadLine);
-                    var completedTask = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2)));
-                    string? result = object.ReferenceEquals(task, completedTask) ? task.Result : string.Empty;
-                    if (result == "stop")
+                    await Task.Delay(TimeSpan.FromSeconds(2));
+                    if (_loop == false)
                     {
-                        _loop = false;
                         break;
                     }
                    // else
